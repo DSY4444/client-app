@@ -23,7 +23,7 @@ const PageHeader = () => {
     const [data, setData] = useState([]);
     const [anchorElNav, setAnchorElNav] = useState(null);
     const [anchorElUser, setAnchorElUser] = useState(null);
-    const [menu,setMenu] = useState(null)
+    // const [menu,setMenu] = useState(null)
 
     console.log(anchorElNav);
     console.log(anchorElUser);
@@ -36,7 +36,7 @@ const PageHeader = () => {
     };
   
     const handleCloseNavMenu = (menu) => {
-      setMenu(menu)
+      // setMenu(menu)
       setAnchorElNav(null);
     };
   
@@ -44,7 +44,7 @@ const PageHeader = () => {
       setAnchorElUser(null);
     };
 
-    console.log(menu);
+    // console.log(menu);
 
 
 
@@ -75,8 +75,6 @@ const PageHeader = () => {
             menuu.push(i.title)
         })
     })
-
-    console.log(menuu);
 
     return (
      
@@ -132,7 +130,7 @@ const PageHeader = () => {
                 }}
               >
                 {menuu.map((page) => (
-                  <MenuItem key={page} onClick={handleCloseNavMenu(page)}>
+                  <MenuItem key={page} onClick={handleCloseNavMenu}>
                     <Typography textAlign="center">{page}</Typography>
                   </MenuItem>
                 ))}
@@ -161,7 +159,7 @@ const PageHeader = () => {
               {menuu.map((page) => (
                 <Button
                   key={page}
-                  onClick={handleCloseNavMenu(page)}
+                  onClick={handleCloseNavMenu}
                   sx={{ my: 2, display: 'block' }} //color : '#FDFEFE', 
                 >
                   {page}
