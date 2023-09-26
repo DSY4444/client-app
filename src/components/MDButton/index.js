@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import PropTypes from "prop-types";
-import MDButtonRoot from "components/MDButton/MDButtonRoot";
-import { useAppController } from "context";
+import MDButtonRoot from "./MDButtonRoot";
+import { useAppController } from "../../context";
 
 const MDButton = forwardRef(
   ({ color, variant, size, circular, iconOnly, children, ...rest }, ref) => {

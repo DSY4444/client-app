@@ -2,8 +2,8 @@
 import PropTypes from "prop-types";
 
 // Material Dashboard 2 React components
-import MDBox from "components/MDBox";
-import rgba from "assets/theme/functions/rgba";
+import MDBox from "../MDBox";
+import rgba from "../../assets/theme/functions/rgba";
 
 function DataTableBodyCell({ noBorder, bordered, align, children, ...rest }) {
   return (

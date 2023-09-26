@@ -5,12 +5,12 @@ import PropTypes from "prop-types";
 import Icon from "@mui/material/Icon";
 
 // Material Dashboard 2 React components
-import MDBox from "components/MDBox";
+import MDBox from "../MDBox";
 
 // Material Dashboard 2 React contexts
-import { useAppController } from "context";
+import { useAppController } from "../../context";
 import { TableCell } from "@mui/material";
-import rgba from "assets/theme/functions/rgba";
+import rgba from "../../assets/theme/functions/rgba";
 
 function DataTableHeadCell({ width, variant, bordered, children, disableSorting, sorted, sortedBy, align, ...rest }) {
   const [controller] = useAppController();

@@ -1,7 +1,7 @@
 import { forwardRef, createContext, useContext, useMemo } from "react";
 import PropTypes from "prop-types";
-import MDBox from "components/MDBox";
-import MDPaginationItemRoot from "components/MDPagination/MDPaginationItemRoot";
+import MDBox from "../MDBox";
+import MDPaginationItemRoot from "./MDPaginationItemRoot";
 const Context = createContext();
 
 const MDPagination = forwardRef(
