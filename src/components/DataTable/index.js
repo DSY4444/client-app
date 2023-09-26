@@ -7,22 +7,22 @@ import TableBody from "@mui/material/TableBody";
 import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import Icon from "@mui/material/Icon";
-import MDBox from "components/MDBox";
-import MDTypography from "components/MDTypography";
-import MDInput from "components/MDInput";
-import MDPagination from "components/MDPagination";
-import DataTableHeadCell from "components/DataTable/DataTableHeadCell";
-import DataTableBodyCell from "components/DataTable/DataTableBodyCell";
+import MDBox from "../MDBox";
+import MDTypography from "../MDTypography";
+import MDInput from "../MDInput";
+import MDPagination from "../MDPagination";
+import DataTableHeadCell from "./DataTableHeadCell";
+import DataTableBodyCell from "./DataTableBodyCell";
 import { Checkbox, TableCell, Tooltip, MenuItem, CircularProgress } from "@mui/material";
-import { useDashboardItem } from "components/DashboardItem";
-import YAScrollbar from "components/YAScrollbar";
+import { useDashboardItem } from "../DashboardItem";
+import YAScrollbar from "../YAScrollbar";
 import Autocomplete from '@mui/material/Autocomplete';
 import { useImmer } from "use-immer";
 import moment from "moment";
-import FilterChip from "components/FilterChip";
-import EmptyState from "components/EmptyState";
-import FilterSelector from "components/FilterSelector";
-import MDButton from "components/MDButton";
+import FilterChip from "../FilterChip";
+import EmptyState from "../EmptyState";
+import FilterSelector from "../FilterSelector";
+import MDButton from "../MDButton";
 
 const IndeterminateCheckbox = React.forwardRef(
   ({ indeterminate, ...rest }, ref) => {

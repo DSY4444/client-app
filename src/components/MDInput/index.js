@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import PropTypes from "prop-types";
-import MDInputRoot from "components/MDInput/MDInputRoot";
+import MDInputRoot from "./MDInputRoot";
 
 const MDInput = forwardRef(({ error, success, disabled, ...rest }, ref) => (
   <MDInputRoot {...rest} ref={ref} ownerState={{ error, success, disabled }} />

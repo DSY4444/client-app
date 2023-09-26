@@ -1,5 +1,5 @@
 import { styled } from "@mui/material/styles";
-import MDButton from "components/MDButton";
+import MDButton from "../MDButton";
 
 export default styled(MDButton)(({ theme, ownerState }) => {
   const { borders, functions, typography, palette } = theme;

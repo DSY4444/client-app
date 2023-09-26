@@ -1,51 +1,71 @@
-import MDBox from "components/MDBox";
-import MDTypography from "components/MDTypography";
-import { Icon, List, ListItem, TextField, Autocomplete, CircularProgress, Card, Alert } from "@mui/material";
-import { useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
-import PageHeader from "components/PageHeader";
-import AnimatedRoute from "components/AnimatedRoute";
-import YASkeleton from "components/YASkeleton";
-import fetchRequest from "utils/fetchRequest";
-import useHandleError from "hooks/useHandleError";
-import MDButton from "components/MDButton";
-import { useYADialog } from "components/YADialog";
-import YAScrollbar from "components/YAScrollbar";
-import DataTable from 'components/DataTable';
-import EmptyState from 'components/EmptyState';
-import new_item_img from 'assets/svg/add_new.svg';
+
+import MDBox from '../../components/MDBox';
+import DataTable from '../../components/DataTable';
+import MDTypography from '../../components/MDTypography';
+import { Icon, Card, Modal, IconButton, CircularProgress, Menu, MenuItem } from '@mui/material';
+// import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import colors from '../../assets/theme/base/colors';
+import fetchRequest from '../../utils/fetchRequest';
+import MDButton from '../../components/MDButton';
+import { useYADialog } from '../../components/YADialog';
+import PageHeader from '../../components/pageHeader';
+import AnimatedRoute from '../../components/AnimatedRoute';
+import YASkeleton from '../../components/YASkeleton';
+import EmptyState from '../../components/EmptyState';
+import new_item_img from '../../assets/svg/add_new.svg';
+import useHandleError from '../../hooks/useHandleError';
 import moment from 'moment';
 import numeral from 'numeral';
-import { useAppController } from 'context';
-import {  pickColorNum } from 'utils/table';
-import Axios from "axios";
-import { getDomain, ActiveStatusReverse } from 'utils';
-import UploadPage from "pages/UploadPage";
-import _ from 'lodash'
-import TeamMemberPopup from "components/TeamMemberPopup";
-import AddTeamMapping from "components/AddTeamMapping";
-import PublishSpend from "components/PublishSpend";
-import colors from "assets/theme/base/colors";
-import MDAvatar from 'components/MDAvatar';
+import { useAppController } from '../../context';
+import { useImmer } from 'use-immer';
+import FilterChip from '../../components/FilterChip';
+import * as XLSX from 'xlsx';
+
+
+
+const FilterDropdown = (props) => {
+  const { formId, filter, onFilterChange } = props;
+  const { name, displayName, dataSource, values } = filter;
+  const [options, setOptions] = useState(dataSource?.type === 'static' ? dataSource.data : []);
+  const [loading, setLoading] = useState(dataSource?.type !== 'static');
+
+  useEffect(() => {
+    async function getOptions() {
+      setLoading(true);
+      const [error, data] = await fetchRequest.get(`/api/master/${formId}/${name}`);
+      if (error)
+        console.error(error)
+      setOptions(data || []);
+      setLoading(false);
+    }
+    if (dataSource?.type !== 'static') getOptions();
+  }, [name]);
+
+  const handleOnFilterChange = (selectedFilter) => {
+    onFilterChange({
+      name: selectedFilter.name,
+      type: selectedFilter.type,
+      operator: selectedFilter.operator,
+      values: selectedFilter.values.map(v => options.find(o => o.label === v)?.value)
+    });
+  }
+
+  const sOptions = useMemo(() => options?.map(o => o.label), [options]);
+  const filterValue = { name, operator: "eq", values: values?.map(v => options?.find(o => o.value === v)?.label) };
+  return (
+    <FilterChip loading={loading} dismissible={false} openOnMount={false} key={name} dataType={"select"} name={name} field={displayName} filterValue={filterValue} options={sOptions} onFilterSave={handleOnFilterChange} />
+  );
+};
 
 const buildColumns = (masterDef, defaultDateFormat) => {
-  const avatarStyles = (color) => ({
-    marginRight: 0.75,
-    background: color ? color[0] : '#454545',
-    fontWeight:'bold',
-    color: color ? color[1] : '#ffffff',
-  })
   const columns = [];
   if (Array.isArray(masterDef.fields) && masterDef.fields.length > 0) {
-    masterDef.fields.forEach((f) => {
-      let col = { align: f.align || 'left' };
+    masterDef.fields?.filter(f => !f.hidden)?.forEach((f) => {
+      let col = { align: f.align || (['integer', 'float', 'currency'].includes(f.type) ? 'right' : 'left') };
       let accessor = f.schemaName;
-      if (f.type === 'dropdown' && f.dataSource?.type === 'dynamic') {
-        if (f.dataSource.alias && f.dataSource.alias !== "") {
-          accessor = `${f.dataSource.alias}__${f.dataSource.labelField}`;
-        } else {
-          accessor = `${f.dataSource.object}__${f.dataSource.labelField}`;
-        }
+      if (f.type === 'dropdown') {
+        accessor = `${f.dataSource.object}__${f.dataSource.labelField}`;
       }
       col['Header'] = f.displayName;
       col['accessor'] = accessor;
@@ -53,23 +73,9 @@ const buildColumns = (masterDef, defaultDateFormat) => {
         if (f.type === "currency")
           return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{numeral(value).format('$0,0')}</MDTypography>
         else if (f.type === "datepicker")
-          if (f.view === "year")
-            return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{value ? moment(value).format("YYYY") : ""}</MDTypography>
-          else
-            return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{value ? moment(value).format(f.format || defaultDateFormat) : ""}</MDTypography>
-        if (f.type === "dropdown" && f.dataSource.type === "static") {
-          let newValue = ""
-          if (value)
-            newValue = _.find(f.dataSource.data, { "value": value }) ? _.find(f.dataSource.data, { "value": value }).label : ""
-          return <MDTypography key={accessor} variant="caption"  color="dark" fontWeight={f.emphasize && "medium"}>{newValue}</MDTypography>
-        } else if(f.avatar && value) {
-          let value1 = value.trim().replaceAll("  ", "")
-          let colorval = pickColorNum(value1)
-          let color = colors.avatarColors[colorval]
-        return <MDTypography key={accessor} variant="caption" color="dark" display="flex" alignItems="center" fontWeight={f.emphasize && "medium"}><MDAvatar name={value.toUpperCase()} size="xs" sx={() =>  avatarStyles(color)} />{value}</MDTypography>
-        }
-        else
-          return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{value}</MDTypography>
+          return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{value ? moment(value).format(f.format || defaultDateFormat) : ""}</MDTypography>
+
+        return <MDTypography key={accessor} variant="caption" color="dark" fontWeight={f.emphasize && "medium"}>{value}</MDTypography>
       };
       col['dataType'] = f.filterType || f.type
       col['disableFilters'] = f.disableFilters || false,
@@ -86,53 +92,27 @@ const buildColumns = (masterDef, defaultDateFormat) => {
     });
   return columns;
 };
+const buildPopupColumns = (masterName) => {
+  let columns = [
+    { Header: masterName, accessor: "masterRecordId", Cell: ({ cell: { value } }) => { return <MDTypography variant="caption" alignItems="center" fontWeight="medium" color="dark">{value}</MDTypography> } },
+    { Header: "Message", accessor: "message", Cell: ({ cell: { value } }) => { return <MDTypography variant="caption" alignItems="center" fontWeight="small" color={value.includes("success") ? "success" : "error"}>{value}</MDTypography> } }
+  ]
+  return columns;
+}
 
-const buildRows = (pkColumn, data, onEdit, onDelete, onAdd, selectedCategoryDef) => {
- selectedCategoryDef && selectedCategoryDef.master && selectedCategoryDef.master === "user" ? data = ActiveStatusReverse(data) : data
-  let addmember = (selectedCategoryDef, row) => {
-    let formdetails = { "selectedCategoryDef": selectedCategoryDef, "row": row }
-    if (selectedCategoryDef && selectedCategoryDef.additonallink) {
-
-      return (
-        <MDTypography
-          display="flex"
-          alignItems="center"
-          ml={3}
-          component="a"
-          href="#"
-          variant="caption"
-          color="text"
-          fontWeight="medium"
-          onClick={() => onAdd(formdetails)}
-        >
-          <Icon fontSize="small" color="info">
-            {
-              selectedCategoryDef.additonallinkicon ? selectedCategoryDef.additonallinkicon : 'add'
-            }
-          </Icon>
-          &nbsp; {selectedCategoryDef.additionallinktext ? selectedCategoryDef.additionallinktext : 'Add'}
-        </MDTypography>
-      )
-    }
-  }
-  let editEnable = (r) => {
-    if (onEdit) {
-      return (
-        <>
-          {selectedCategoryDef.name == "cloudTeamMapping" ?
-            <MDTypography
-              display="flex"
-              alignItems="center"
-              component="a"
-              href="#"
-              onClick={() => onEdit(r[pkColumn])}
-              variant="caption"
-              color="text"
-              fontWeight="medium"
-            >
-              <Icon fontSize="small" color="info">add</Icon>&nbsp;Add Exception
-            </MDTypography>
-            :
+const buildRows = (pkColumn, data, onEdit, onDelete) => {
+  const rows = [];
+  if (Array.isArray(data) && data.length > 0) {
+    data.forEach((r) => {
+      let row = {};
+      Object.keys(r).forEach((k) => {
+        row[k.replace(/\./g, '__')] = r[k];
+      });
+      row['actions'] =
+        Boolean(r?.taxonomy) === true ? (
+          <span></span>
+        ) : (
+          <MDBox display="flex" alignItems="center" mt={{ xs: 2, sm: 0 }}>
             <MDTypography
               display="flex"
               alignItems="center"
@@ -145,25 +125,6 @@ const buildRows = (pkColumn, data, onEdit, onDelete, onAdd, selectedCategoryDef)
             >
               <Icon fontSize="small">edit</Icon>&nbsp;Edit
             </MDTypography>
-
-          }
-        </>
-      )
-    }
-  }
-  const rows = [];
-  if (Array.isArray(data) && data.length > 0) {
-    data.forEach((r) => {
-      let row = {};
-      Object.keys(r).forEach((k) => {
-        row[k.replace(/\./g, '__')] = r[k];
-      });
-      row['actions'] =
-        r?.taxonomy === true ? (
-          <span></span>
-        ) : (
-          <MDBox display="flex" alignItems="center" mt={{ xs: 2, sm: 0 }}>
-            {editEnable(r)}
             <MDTypography
               display="flex"
               alignItems="center"
@@ -180,9 +141,6 @@ const buildRows = (pkColumn, data, onEdit, onDelete, onAdd, selectedCategoryDef)
               </Icon>
               &nbsp;Delete
             </MDTypography>
-            {
-              addmember(selectedCategoryDef, r)
-            }
           </MDBox>
         );
       rows.push(row);
@@ -191,38 +149,94 @@ const buildRows = (pkColumn, data, onEdit, onDelete, onAdd, selectedCategoryDef)
   return rows;
 };
 
-export const Masters = (props) => {
-  const { masterId, selectedCategoryDef } = props;
+const filtersInitiaized = (filters) => {
+  let initiaized = false;
+  filters?.forEach(f => {
+    if (f.values && Array.isArray(f.values) && f.values?.length > 0) {
+      initiaized = true;
+      return;
+    }
+  });
+  return initiaized;
+}
+const buildPopupRows = (masterName, data) => {
+  let rows = data.map(item => {
+    return {
+      "masterRecordId": item[masterName],
+      "message": item["message"],
+    }
+  })
+  return rows
+}
+
+const Masters = (props) => {
   const [step, setStep] = useState('LOADING');
   const handleError = useHandleError();
-  const [masterDef, setMasterDef] = useState(null);
+  // const { masterId } = useParams();
+  const { masterId } = props
+  const [masterDef, setMasterDef] = useImmer(null);
+  const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState([]);
-  const [rowData, setRowData] = useState([]);
   const [columns, setColumns] = useState([]);
   const [refresh, setRefresh] = useState(null);
-  const [showTeamMember, setshowTeamMember] = useState(false)
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [popupRows, setpopupRows] = useState([])
+  const [popupColumns, setpopupColums] = useState([])
+  const [popup, setpopup] = useState(false)
+  const [progress, setProgress] = useState(false);
+  const [openMenu, setOpenMenu] = useState(false);
   const [controller,] = useAppController();
   const { appDef: { settings } } = controller;
   const defaultDateFormat = (settings && settings.dateFormat) || "DD/MM/YYYY";
 
   const { showForm, showAlert, showPrompt, showSnackbar } = useYADialog();
 
+  const handlePopup = () => {
+    setpopup(false)
+    setRefresh(Math.random());
+  }
+
   const handleClose = () => {
     setRefresh(Math.random());
   };
 
-  const handleAdd = (item) => {
-    setRowData(item)
-    setshowTeamMember(true)
+  const handleOpenMenu = (event) => {
+    setOpenMenu(event.currentTarget)
+    // showCustomDrawer('', () => <UserInfoDrawer />);
+  };
 
-  }
-  const handleTeamMemberClose = () => {
-    setshowTeamMember(false)
+  const handleCloseMenu = () => setOpenMenu(false);
+  const handleCloseMenuItem = (a) => {
+    setOpenMenu(false)
+    if (a)
+      a();
+  };
+
+  const handleDownload =  () => {
+  if (columns && rows) {
+  var data = [];
+  rows.forEach(element => {  
+    let obj = {}
+    columns.forEach((e) => {
+       if(e.type === 'date' && element[e.accessor] !== null){
+       element[e.accessor] = moment(element[e.accessor]).format(defaultDateFormat);
+     }
+       obj[e.Header] = element[e.accessor]
+     })
+    data.push(obj)
+  });
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(data)
+  XLSX.utils.book_append_sheet(wb, ws, 'test')
+  XLSX.writeFile(wb, `${masterId} ${moment(Date()).format("YYYYMMDDHHmmss")}.csv`)
+}
+
+    handleCloseMenuItem();
   }
 
   const handleEdit = (pkId) => {
     showForm(
-       masterDef.name == "cloudTeamMapping" ? `Add ${masterDef.singularDisplayName || masterDef.displayName} Exception` : `Edit ${masterDef.singularDisplayName || masterDef.displayName}`,
+      `Edit ${masterDef.singularDisplayName || masterDef.displayName}`,
       masterDef,
       handleClose,
       'edit',
@@ -230,13 +244,14 @@ export const Masters = (props) => {
     );
   };
 
+  const handleOnUpdate = useCallback(({ selected }) => {
+    setSelectedRows(selected)
+  }, [])
+
   const deleteMaster = async (pkId) => {
     const [err, data] = await fetchRequest.delete(`/api/master/${masterId}/${pkId}`);
     if (err) {
-      if (err.data.message === "AdminRoleChangeFail") {
-        showAlert("Attention", "Assign another admin before deleting this user.")
-      } else
-        showAlert('Delete', 'Something went wrong. Contact your administrator.');
+      showAlert('Delete', 'Something went wrong. Contact your administrator.');
     }
     else
       if (data && data.result === true) {
@@ -255,27 +270,40 @@ export const Masters = (props) => {
   const handleDelete = (pkId) => {
     showPrompt('Delete', 'Are you sure you want to delete?', () => handleDeleteSuccess(pkId));
   };
-  
-  const handleDeleteMultiple = (selectedRows) => {
-    showPrompt("Delete", "Are you sure you want to delete?", () =>
-      deleteCostPoolMappingMultipleRecords(JSON.stringify(selectedRows))
-    );
-  };
-
-  const deleteCostPoolMappingMultipleRecords = async (selectedRows) => {
-    const [err, data] = await fetchRequest.post(
-      `/api/dataflow/teamRules/delete/selected`,
-      selectedRows
-    );
+  const deleteMasterMultipleRecords = async (selectedRows) => {
+    setProgress(true);
+    const [err, data] = await fetchRequest.post(`/api/master/${masterId}`, selectedRows);
 
     if (err) {
-      showAlert("Delete", "Something went wrong. Contact your administrator.");
-    } else if (data) {
-      showSnackbar(data, "success");
-      if (setRefresh) {
-        setRefresh(Math.random());
-      }
+      setProgress(false)
+      showAlert('Delete', 'Something went wrong. Contact your administrator.');
     }
+    else
+      if (data) {
+        setProgress(false)
+        setpopupColums(buildPopupColumns(masterDef.displayName));
+        setpopupRows(buildPopupRows(masterDef.displayName, data));
+        setpopup(true)
+      }
+  }
+
+  const handleDeleteMultiple = (selectedRows) => {
+    showPrompt('Delete', 'Are you sure you want to delete?', () => deleteMasterMultipleRecords(JSON.stringify(selectedRows)));
+  };
+
+  const getAppliedFilters = () => {
+    if (!masterDef.filters || masterDef.filters.length === 0)
+      return null;
+
+    return {
+      "filters": JSON.stringify(
+        masterDef.filters?.map(f => ({
+          name: f.name,
+          operator: f.operator,
+          value: f.values
+        })) || []
+      )
+    };
   };
 
   useEffect(() => {
@@ -285,53 +313,143 @@ export const Masters = (props) => {
         handleError(err);
       } else {
         setMasterDef(data);
+        // if (data.filters && filtersInitiaized(data.filters))
+        //   setFilters(data.filters)
         setColumns(buildColumns(data, defaultDateFormat));
       }
     }
     getMasterDef();
-  }, [masterId, selectedCategoryDef]);
+  }, [masterId]);
 
   useEffect(() => {
     async function getList() {
-      var [err, data] = await fetchRequest.get(`/api/master/${masterId}/list`);
+      setLoading(true);
+      const appliedFilters = getAppliedFilters();
+      var [err, data] = await fetchRequest.post(`/api/master/${masterId}/list`, appliedFilters);
       if (err) {
         handleError(err);
       } else {
         if (data && Array.isArray(data) && data.length > 0) {
-          setRows(buildRows(masterDef.pkColumn || 'id', data, handleEdit, handleDelete, handleAdd, selectedCategoryDef));
+          setRows(buildRows(masterDef.pkColumn || 'id', data, handleEdit, handleDelete));
           setStep('LOADED');
         } else {
+          setRows([]);
           setStep('EMPTY');
         }
       }
+      setLoading(false);
     }
     if (masterDef) {
       getList();
     }
   }, [masterId, masterDef, refresh]);
 
-
   if (step === 'LOADING') {
-    return <YASkeleton variant="loading" />;
+    return <YASkeleton variant="dashboard-loading" />;
   }
 
-  const { displayName, singularDisplayName, desc, message } = masterDef;
+  const { displayName, singularDisplayName, desc, message, canFilter } = masterDef;
 
   const handleAddButtonClick = () => {
     showForm(`New ${singularDisplayName || displayName}`, masterDef, handleClose);
+    handleCloseMenuItem();
   };
 
-  const renderPrimaryActions = !masterDef.readonly ? (
-    <MDButton
-      variant="gradient"
-      color="info"
-      sx={{marginLeft:"10px"}}
-      startIcon={<Icon>add</Icon>}
-      onClick={handleAddButtonClick}
-    >
-      Add New
-    </MDButton>
-  ) : undefined;
+  const handleOnFilterChange = (selectedFilter) => {
+    setMasterDef((draft) => {
+      let filter = draft.filters?.find(f => f.name === selectedFilter.name);
+      filter.operator = selectedFilter.operator;
+      filter.values = selectedFilter.values;
+    });
+  };
+
+  // const renderPrimaryActions = () => {
+  //   return !masterDef.readonly ? (
+  //     <>
+  //        <MDBox color="text" pt={0} mt={0} display="flex" flexDirection="row">
+  //         <Menu
+  //           anchorEl={openMenu}
+  //           anchorReference={null}
+  //           anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+  //           transformOrigin={{ vertical: "top", horizontal: "right" }}
+  //           open={Boolean(openMenu)}
+  //           onClose={handleCloseMenu}
+  //         >
+  //           {<>
+  //             <MenuItem key={'download'} onClick={handleDownload}>{"Download"}</MenuItem>
+  //           </>
+  //           }
+  //         </Menu>
+  //         <MDBox mt={0.5} mr={-1} pt={0}>
+  //           <MDButton
+  //             // size="medium"
+  //             disableRipple
+  //             color="dark"
+  //             variant="text"
+  //             onClick={handleOpenMenu}
+  //             sx={{ "& .MuiIcon-root": { fontSize: "20px!important" } }}
+  //             iconOnly
+  //           >
+  //             <Icon px={0} py={0}>more_horiz</Icon>
+  //           </MDButton>
+  //         </MDBox>
+  //         &nbsp;
+  //         &nbsp; 
+  //           <MDButton
+  //       variant="gradient"
+  //       color="info"
+  //       startIcon={<Icon>add</Icon>}
+  //       onClick={handleAddButtonClick}
+  //     >
+  //       Add New 
+  //     </MDButton>  
+  //       </MDBox> 
+  //     </>
+  //   ) : undefined;
+  // };
+
+  const renderPrimaryActions = () => {
+    return (
+      <>
+    <Menu
+          anchorEl={openMenu}
+          anchorReference={null}
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          transformOrigin={{ vertical: "top", horizontal: "right" }}
+          open={Boolean(openMenu)}
+          onClose={handleCloseMenu}
+        >
+          {<>
+            <MenuItem  data-testid = {"Download".toLowerCase().replaceAll(' ', '')} key={'download'} onClick={handleDownload}>{"Download"}</MenuItem>
+          </>
+          }
+        </Menu>
+        <MDBox >
+        {!masterDef.type && (<MDButton
+        data-testid = {"Add New".toLowerCase().replaceAll(' ', '')}
+        variant="gradient"
+        color="info"
+        startIcon={<Icon>add</Icon>}
+        onClick={handleAddButtonClick}
+      >
+        Add New
+      </MDButton>)}
+      &nbsp;
+            <MDButton
+            // size="medium"
+            disableRipple
+            color="dark"
+            variant="text"
+            onClick={handleOpenMenu}
+            sx={{ "& .MuiIcon-root": { fontSize: "20px!important" } }}
+            iconOnly
+          >
+            <Icon px={0} py={0}>more_horiz</Icon>
+          </MDButton>
+        </MDBox> 
+    </>
+    )
+  }
 
   const renderAddButton = () =>
     !masterDef.readonly ? (
@@ -345,42 +463,27 @@ export const Masters = (props) => {
       </MDButton>
     ) : undefined;
 
-  return (
-    <MDBox flex={1} display="flex" flexDirection="column" px={4} py={3}>
-      {showTeamMember && <TeamMemberPopup handleTeamMemberClose={handleTeamMemberClose} data={rowData} buildColumns={buildColumns} buildRows={buildRows} defaultDateFormat />}
-      <MDTypography variant="button" color="dark" fontWeight="medium">{displayName}</MDTypography>
-      <MDTypography mb={1} variant="button" color="text">{desc}</MDTypography>
-      {
-        message &&
-        <Alert severity="warning"
-          sx={{ marginTop: 1, marginBottom: 1, fontSize: "14px", textAlign: "left" }}
-        >{message}</Alert>
-      }
-      <MDBox pt={1}>
-        {step === 'LOADED' && (
-          <Card sx={{ height: '100%' }} px={0}>
-            <DataTable
-              table={{ columns, rows }}
-              showTotalEntries={true}
-              isSorted={true}
-              isSelectable={selectedCategoryDef?.name == "cloudTeamMapping" ? true : false}
-              newStyle1={true}
-              noEndBorder
-              entriesPerPage={true}
-              canSearch={true}
-              canFilter={true}
-              hideFooterForMinRecords={true}
-              primaryActions={renderPrimaryActions}
-              deleteMultiple={true}
-              onDeleteMultiple={handleDeleteMultiple}
-            />
-          </Card>
-        )}
-        {step === 'EMPTY' && (
+  const renderFilters = () => {
+    return (
+      <>
+        {masterDef.filters?.map((f) => (
+          <FilterDropdown key={f.name} formId={masterId} filter={f} onFilterChange={handleOnFilterChange} />
+        ))}
+      </>
+    )
+  }
+const defaultFilteresInitiaized = filtersInitiaized(masterDef?.filters);
+return (
+    <>
+      <MDBox bgColor={colors.dashboardBackground} minHeight="calc(100vh - 56px)" paddingBottom={{ lg: 0, md: 6, sm: 6, xs: 6 }}>
+        <PageHeader title={displayName} subtitle={desc} message={message} primaryActionComponent={renderPrimaryActions}/>
+        <MDBox p={3}>
+        {step === 'EMPTY' && (masterDef.filters?.length === 0 || !defaultFilteresInitiaized) && (
           <MDBox
             display="flex"
             alignItems="center"
             justifyContent="center"
+            minHeight="calc(100vh - 300px)"
           >
             <EmptyState
               size="large"
@@ -397,403 +500,63 @@ export const Masters = (props) => {
             />
           </MDBox>
         )}
-      </MDBox>
-    </MDBox>
-  );
-};
-
-const AppSettingDropdown = (props) => {
-  const { name, displayName, required, helperText, type, dataSource, value, actions, refreshKey, onSave } = props;
-  const [val, setVal] = useState(value);
-  const [options, setOptions] = useState(dataSource?.type === 'static' ? dataSource.data : []);
-  const [loading, setLoading] = useState(dataSource?.type !== 'static');
-  const [error, setError] = useState(false);
-  const [thresholdError, setThresholdError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { showSnackbar, showAlert } = useYADialog();
-
-  useEffect(() => {
-    async function getOptions() {
-      setLoading(true);
-      if (type !== "integer") {
-        const [err, data] = await fetchRequest.get(`/api/settings/${name}`);
-        if (err)
-          console.error(err)
-        setOptions(data || []);
-        setLoading(false);
-      }
-
-    }
-    if (dataSource?.type !== 'static') getOptions();
-  }, [name, refreshKey]);
-
-  useEffect(() => {
-    if (val !== value)
-      setVal(value);
-  }, [value]);
-
-  const handlePostClientActions = () => {
-    if (actions?.length > 0) {
-      actions.filter(a => a.location === "client")?.forEach(a => {
-        if (a.type === "updateStorage") {
-          if (sessionStorage && a.key !== 'Month')
-            sessionStorage[a.key] = val;
-        }
-      })
-    }
-  }
-
-  const handleSave = async (evt) => {
-    evt.preventDefault();
-    setError(false);
-    const domain = getDomain();
-
-    const err = required && (!val || val === "");
-
-    if (!err) {
-      setIsSubmitting(true);
-
-      const [_err, data] = await fetchRequest.post(`/api/settings/${name}`, { [name]: val });
-      if (_err) {
-        showAlert("Error", "Something went wrong. Contact your administrator.");
-      }
-      else {
-        if (data && data.result === false) {
-          if (Array.isArray(data.errors) && data.errors.length > 0) {
-            let errorsObj = {};
-            data.errors.forEach((e) => errorsObj[e.field] = true);
-            setError(errorsObj);
-          }
-        }
-        else {
-          const appRes = await Axios.get(`${domain}/api/app?${("nc=" + Math.random()).replace(".", "")}`);
-          if (typeof (Storage) !== "undefined")
-            appRes.data.defaults?.map((item) => {
-              if ((!sessionStorage[item.name]) || (item.name === 'Month')) {
-                return sessionStorage[item.name] = item.value
-              }
-            })
-          showSnackbar(data.message, "success");
-          handlePostClientActions();
-
-          if (onSave) onSave();
-        }
-      }
-
-      setIsSubmitting(false);
-
-    } else {
-      setError(true);
-    }
-
-  }
-
-  const handleCancel = () => {
-    setThresholdError("")
-    setError(false);
-    setVal(value);
-  }
-
-  const handletextInput = (e) => {
-    setThresholdError("")
-    setError(false);
-    e.preventDefault
-    setVal(e.target.value)
-  }
-  const handleRagThreshold = async (e) => {
-    if (val === '') {
-      setError(true)
-      setThresholdError('This field cannot be empty.Please enter a value')
-      return
-    }
-
-    if (isNaN(val) || Number(val) <= 0) {
-      setError(true)
-      setThresholdError('Please enter a positive number')
-      return
-    }
-    if (Number(val) >= 100) {
-      setError(true)
-      setThresholdError('Please enter a number between 0 and 100')
-      return
-    }
-    if (thresholdError === "") {
-      handleSave(e)
-    }
-  }
-  if (type === "integer") {
-    return (
-      <MDBox display="flex" alignItems="flex-start" marginBottom={2}>
-        <MDBox>
-          <MDTypography mt={2} mb={.75} variant="caption" color="text" fontWeight="medium">{displayName} <br />
-            <TextField
-              // label={displayName}
-              value={val}
-              sx={{ width: 400 }}
-              size="small"
-              helperText={thresholdError !== '' ? thresholdError : helperText}
-              error={Boolean(error)}
-              onChange={handletextInput}
-            />
-          </MDTypography>
-        </MDBox>
-        {
-          value !== val &&
+        {(step === 'LOADED' || (step === 'EMPTY' && masterDef.filters?.length > 0) && defaultFilteresInitiaized) &&
           <>
-            <MDButton
-              size='small'
-              iconOnly
-              variant="gradient"
-              color="success"
-              disabled={isSubmitting}
-              sx={{ marginTop: 4.5, marginLeft: 2, height: 30, width: 30 }}
-              onClick={handleRagThreshold}
-            >
-              {isSubmitting ? <CircularProgress color="white" size={15} /> : <Icon>done</Icon>}
-            </MDButton>
-            <MDButton
-              size='small'
-              iconOnly
-              variant="gradient"
-              color="error"
-              disabled={isSubmitting}
-              sx={{ marginTop: 4.5, marginLeft: 1, height: 30, width: 30 }}
-              onClick={handleCancel}
-            >
-              <Icon>close</Icon>
-            </MDButton>
-          </>
-        }
-
-      </MDBox>
-    )
-  } else {
-    return (
-      <MDBox display="flex" alignItems="flex-start" marginBottom={2}>
-        <MDBox>
-          <MDTypography mt={2} mb={.75} variant="caption" color="text" fontWeight="medium">{displayName}</MDTypography>
-          <Autocomplete
-            // multiple
-            // limitTags={1}
-            loading={loading}
-            // disableClearable={true}
-            onChange={(event, item) => {
-              const value = Array.isArray(item) ? item?.map(i => i.value) : item?.value;
-              setVal(value);
-            }}
-            options={options}
-            value={val}
-            getOptionLabel={(option) => {
-              if (typeof option === 'number')
-                return options.find((op) => op.value === option)?.label || '';
-              if (typeof option === 'string')
-                return (
-                  options.find((op) => String(op.value)?.toLowerCase() === option?.toLowerCase())?.label || ''
-                );
-              return option?.label || '';
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                name={name}
-                // label={displayName}
-                sx={{ width: 400 }}
-                size="small"
-                helperText={helperText}
-                error={error}
+            <Card sx={{ height: '100%' }} px={0}>
+              <DataTable
+                table={{ columns, rows }}
+                showTotalEntries={true}
+                isSorted={true}
+                newStyle1={true}
+                isSelectable={ masterDef.readonly || masterDef.taxonomy ? false : true }
+                noEndBorder
+                entriesPerPage={true}
+                canSearch={true}
+                onUpdate={handleOnUpdate}
+                filtersComponent={renderFilters()}
+                canFilter={canFilter}
+                loading={loading}
+                deleteMultiple={ masterDef.readonly || masterDef.taxonomy ? false : true }
+                onDeleteMultiple={() => handleDeleteMultiple(selectedRows)}
+                onDeleteAll={handleDeleteMultiple}
               />
-            )}
-          />
-        </MDBox>
-        {
-          value !== val &&
-          <>
-            <MDButton
-              size='small'
-              iconOnly
-              variant="gradient"
-              color="success"
-              disabled={isSubmitting}
-              sx={{ marginTop: 4.5, marginLeft: 2, height: 30, width: 30 }}
-              onClick={handleSave}
-            >
-              {isSubmitting ? <CircularProgress color="white" size={15} /> : <Icon>done</Icon>}
-            </MDButton>
-            <MDButton
-              size='small'
-              iconOnly
-              variant="gradient"
-              color="error"
-              disabled={isSubmitting}
-              sx={{ marginTop: 4.5, marginLeft: 1, height: 30, width: 30 }}
-              onClick={handleCancel}
-            >
-              <Icon>close</Icon>
-            </MDButton>
+
+              {progress && (
+                <CircularProgress size={70} sx={() => ({ color: "#1A73E8", backgroundColor: "transparent", position: 'absolute', top: 350, left: 900, zIndex: 1, })} />
+              )}
+
+              <Modal open={popup} onClose={handlePopup}>
+                <MDBox pt={20} pl={50} pr={50} height="100%" width="100%" display="flex" alignItems="center" justifyContent="center">
+                  <Card sx={{ height: "75%", width: "95%", overflow: 'hidden' }}>
+                    <MDBox px={3} pt={2} display="flex" justifyContent="space-between" alignItems="center">
+                      <MDBox>
+                        <MDTypography variant="h6" component="span" color="text">
+                          {masterDef.displayName} Deletion
+                        </MDTypography>
+                      </MDBox>
+                      <MDBox display="flex">
+                        <IconButton onClick={handlePopup} title="Close">
+                          <Icon>close</Icon>
+                        </IconButton>
+                      </MDBox>
+                    </MDBox>
+                    <DataTable
+                      table={{ columns: popupColumns, rows: popupRows }}
+                      containerMaxHeight={474}
+                      showTotalEntries={true}
+                      entriesPerPage={true}
+                    >
+                    </DataTable>
+                  </Card>
+                </MDBox>
+              </Modal>
+            </Card>
           </>
         }
-
-      </MDBox>
-    );
-
-  }
-
-};
-
-const AppSettingsByCategory = (props) => {
-  const { settingsDef } = props;
-  const handleError = useHandleError();
-  const [refresh, setRefresh] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [formValues, setFormValues] = useState([]);
-
-  useEffect(() => {
-    async function getSettingsValues() {
-      var [err, data] = await fetchRequest.get(`/api/settings/category/${settingsDef?.name}`);
-      if (err) {
-        handleError(err);
-      }
-      else {
-        setFormValues(data);
-      }
-      setLoading(false);
-    }
-    getSettingsValues();
-  }, [settingsDef, refresh])
-
-  const handleOnSave = () => {
-    setRefresh(Math.random());
-  };
-
-  if (loading) {
-    return <YASkeleton variant="loading" />;
-  }
-
-  return <MDBox flex={1} display="flex" flexDirection="column" px={4} py={3}>
-    <MDTypography variant="button" color="dark" fontWeight="medium">{settingsDef?.displayName}</MDTypography>
-    <MDTypography mb={1} variant="button" color="text">{settingsDef?.desc}</MDTypography>
-    {
-      settingsDef?.settings?.map(
-        s => {
-          const formValue = formValues?.find(v => v.name === s.name)?.value;
-          return <AppSettingDropdown
-            key={s.name}
-            name={s.name}
-            required={s.required}
-            displayName={s.displayName}
-            value={formValue}
-            dataSource={s.dataSource}
-            helperText={s.helperText}
-            type={s.type}
-            actions={s.actions}
-            refreshKey={refresh}
-            onSave={handleOnSave}
-          />
-        }
-      )
-    }
-  </MDBox>
-}
-
-const AppSettings = () => {
-
-  const handleError = useHandleError();
-  const { hash } = useLocation();
-  const [appSettingsDef, setAppSettingsDef] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [selectedCategoryDef, setSelectedCategoryDef] = useState(null);
-  let appSettingTab = "cloudSpend"
-
-  useEffect(() => {
-    async function getSettings() {
-      var [err, data] = await fetchRequest.get(`/api/settings`);
-      if (err) {
-        handleError(err);
-      }
-      else {
-        setAppSettingsDef(data);
-        if (data) {
-          const anchor = hash !== '' ? hash.replace('#', '') : null
-          if (anchor) {
-            setSelectedCategoryDef(data?.categories[0]?.categories.find(cat => cat.name === anchor))
-          } else {
-            setSelectedCategoryDef(data?.categories[0]?.categories[0]);
-          }
-        }
-      }
-      setLoading(false);
-    }
-    getSettings();
-  }, [])
-
-  if (loading) {
-    return <YASkeleton variant="dashboard-loading" />;
-  }
-
-  const renderMainCategories = () => {
-    return appSettingsDef?.categories?.map(
-      c => <MDBox key={c.name}>
-        <MDTypography ml={1.25} variant="button" color="text" fontWeight="medium">{c.displayName}</MDTypography>
-        <List sx={{ mt: .5, mb: 2 }}>
-          {
-            c?.categories?.map(cc => (
-              <ListItem key={cc.name}>
-                <MDButton
-                  name={cc.name}
-                  variant="text"
-                  color="info"
-                  sx={{
-                    textTransform: "none",
-                    py: .8,
-                    px: 1.5,
-                    mb: .25,
-                    background: selectedCategoryDef?.name === cc.name ? 'rgba(28, 32, 77, 0.04)' : "inherit"
-                  }}
-                  onClick={() => setSelectedCategoryDef(cc)}
-                >
-                  {cc.displayName}
-                </MDButton>
-              </ListItem>
-            ))
-          }
-        </List>
-      </MDBox>
-    )
-  }
-  return (
-    <>
-      <PageHeader title={appSettingsDef?.displayName} subtitle={appSettingsDef?.desc} />
-      <MDBox width="100%" height="calc(100vh - 156px)" px={3} pt={1}>
-        {/* {console.log(selectedCategoryDef)} */}
-        <MDBox borderRadius="6px" border="1px solid #ddd" width="100%" height="100%" display="flex" overflow="hidden">
-          <MDBox minWidth="280px" borderRight="1px solid #ddd" px={3} py={2}>
-            <YAScrollbar>
-              {renderMainCategories()}
-            </YAScrollbar>
-          </MDBox>
-          <YAScrollbar>
-            {selectedCategoryDef.type === "load" &&
-              <UploadPage destination={selectedCategoryDef.destination} appSettingTab={appSettingTab} />
-            }
-            {selectedCategoryDef.type === "rules" &&
-              <AddTeamMapping masterId={selectedCategoryDef.master} selectedCategoryDef={selectedCategoryDef} />
-            }
-            {selectedCategoryDef.type === "settings" &&
-              <AppSettingsByCategory settingsDef={selectedCategoryDef} />
-            }
-            {selectedCategoryDef.type === "master" &&
-              <Masters masterId={selectedCategoryDef.master} selectedCategoryDef={selectedCategoryDef} />
-            }
-            {selectedCategoryDef.type === "publish" &&
-              <PublishSpend />
-            }
-          </YAScrollbar>
         </MDBox>
       </MDBox>
     </>
   );
 };
 
-
-
-export default AnimatedRoute(AppSettings);
+export default AnimatedRoute(Masters);
